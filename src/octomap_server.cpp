@@ -170,6 +170,12 @@ namespace octomap_server {
         this->subscribe();
 
         rclcpp::QoS qos(rclcpp::KeepLast(3));
+
+        // Use transient_local durability for /projected_map to match Nav2's static_layer expectations
+        rclcpp::QoS map_qos(rclcpp::KeepLast(1));
+        map_qos.transient_local();
+        map_qos.reliable();
+
         this->m_markerPub = this->create_publisher<
             visualization_msgs::msg::MarkerArray>(
                 "occupied_cells_vis_array", qos);
@@ -181,7 +187,7 @@ namespace octomap_server {
             sensor_msgs::msg::PointCloud2>(
                 "octomap_point_cloud_centers", qos);
         this->m_mapPub = this->create_publisher<
-            nav_msgs::msg::OccupancyGrid>("projected_map", qos);
+            nav_msgs::msg::OccupancyGrid>("projected_map", map_qos);
         this->m_fmarkerPub = this->create_publisher<
             visualization_msgs::msg::MarkerArray>(
                 "free_cells_vis_array", qos);
