@@ -194,9 +194,22 @@ namespace octomap_server {
     }
 
     void OctomapServer::subscribe() {
+        const std::string reliability = this->declare_parameter<std::string>(
+            "cloud_in_reliability", "reliable");
+        const int depth_param = this->declare_parameter<int>("cloud_in_history_depth", 5);
+        const size_t depth = depth_param > 0 ? static_cast<size_t>(depth_param) : 5;
+
+        rclcpp::QoS cloud_qos = rclcpp::QoS(rclcpp::KeepLast(depth));
+        cloud_qos.durability(rclcpp::DurabilityPolicy::Volatile);
+        if (reliability == "best_effort") {
+            cloud_qos.best_effort();
+        } else {
+            cloud_qos.reliable();
+        }
+
         this->m_pointCloudSub = std::make_shared<
             message_filters::Subscriber<sensor_msgs::msg::PointCloud2>>(
-                this, "cloud_in", rmw_qos_profile_sensor_data);
+                this, "cloud_in", cloud_qos.get_rmw_qos_profile());
 
         auto create_timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
             this->get_node_base_interface(),
@@ -344,7 +357,7 @@ namespace octomap_server {
             } catch (tf2::TransformException& ex) {
                 std::string msg = std::string("Transform error for ground plane filter") +
                     "You need to set the base_frame_id or disable filter_ground.";
-                RCLCPP_ERROR(this->get_logger(), "%s %", msg, ex.what());
+                RCLCPP_ERROR(this->get_logger(), "%s %s", msg.c_str(), ex.what());
                 return;
             }
 
