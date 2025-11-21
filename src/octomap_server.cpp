@@ -33,6 +33,10 @@ namespace octomap_server {
         m_groundFilterAngle(0.15),
         m_groundFilterPlaneDistance(0.07),
         m_compressMap(true),
+        m_localDecayEnabled(false),
+        m_localDecayHalfLength(4.0),
+        m_localDecayFloorDepth(0.5),
+        m_localDecayHeight(2.5),
         m_incrementalUpdate(false) {
 
         rclcpp::Clock::SharedPtr clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
@@ -80,6 +84,11 @@ namespace octomap_server {
             "ground_filter/angle", m_groundFilterAngle);
         m_groundFilterPlaneDistance = this->declare_parameter(
             "ground_filter/plane_distance", m_groundFilterPlaneDistance);
+
+        m_localDecayEnabled = this->declare_parameter("local_decay_enable", false);
+        m_localDecayHalfLength = this->declare_parameter("local_decay_half_length", 4.0);
+        m_localDecayFloorDepth = this->declare_parameter("local_decay_floor_depth", 0.5);
+        m_localDecayHeight = this->declare_parameter("local_decay_height", 2.5);
 
         m_maxRange = this->declare_parameter(
             "sensor_model/max_range", m_maxRange);
@@ -407,11 +416,41 @@ namespace octomap_server {
         publishAll(cloud->header.stamp);
     }
 
+    void OctomapServer::clearLocalBBX(const octomap::point3d& sensor_origin) {
+        octomap::point3d min(
+            sensor_origin.x() - m_localDecayHalfLength,
+            sensor_origin.y() - m_localDecayHalfLength,
+            sensor_origin.z() - m_localDecayFloorDepth);
+        octomap::point3d max(
+            sensor_origin.x() + m_localDecayHalfLength,
+            sensor_origin.y() + m_localDecayHalfLength,
+            sensor_origin.z() + m_localDecayHeight);
+
+        double thresMin = m_octree->getClampingThresMin();
+        for(auto it = m_octree->begin_leafs_bbx(min,max),
+                end=m_octree->end_leafs_bbx(); it!= end; ++it) {
+            it->setLogOdds(octomap::logodds(thresMin));
+        }
+        m_octree->updateInnerOccupancy();
+
+        octomap::OcTreeKey minKey, maxKey;
+        if (m_octree->coordToKeyChecked(min, minKey)) {
+            updateMinKey(minKey, m_updateBBXMin);
+        }
+        if (m_octree->coordToKeyChecked(max, maxKey)) {
+            updateMaxKey(maxKey, m_updateBBXMax);
+        }
+    }
+
     void OctomapServer::insertScan(
         const geometry_msgs::msg::Vector3 &sensorOriginTf,
         const PCLPointCloud& ground,
         const PCLPointCloud& nonground) {
         octomap::point3d sensorOrigin = octomap::pointTfToOctomap(sensorOriginTf);
+
+        if (m_localDecayEnabled) {
+            clearLocalBBX(sensorOrigin);
+        }
         
         if (!m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMin)
             || !m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMax)) {

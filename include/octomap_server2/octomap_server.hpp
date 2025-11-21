@@ -136,6 +136,10 @@ namespace octomap_server {
         double m_groundFilterAngle;
         double m_groundFilterPlaneDistance;
         bool m_compressMap;
+        bool m_localDecayEnabled;
+        double m_localDecayHalfLength;
+        double m_localDecayFloorDepth;
+        double m_localDecayHeight;
 
         // downprojected 2D map:
         bool m_incrementalUpdate;
@@ -232,6 +236,7 @@ namespace octomap_server {
         virtual bool octomapFullSrv(
             const std::shared_ptr<OctomapSrv::Request> ,
             std::shared_ptr<OctomapSrv::Response>);
+        void clearLocalBBX(const octomap::point3d& sensor_origin);
 
         bool clearBBXSrv(
             const std::shared_ptr<BBXSrv::Request>,
